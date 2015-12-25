@@ -7,9 +7,6 @@
 ## Saves all running docker containers, and syncs with Amazon S3 Bucket
 ##
 
-# Set the Amazon S3 bucket you want to upload the backups to
-# Find out which buckets you have access to with : s3cmd ls
-#bucket="s3://bucket" - use a env variable instead
 
 # Delete old backups? Any files older than $daystokeep will be deleted on the bucket
 # Don't use this option on buckets which you use for other purposes as well
@@ -33,25 +30,28 @@ tmpbackupdir="/tmp"
 # Based on S3 MYSQL backup at https://gist.github.com/2206527
 
 echo -e ""
-echo -e "\e[1;31mAmazon S3 Backup Docker edition\e[00m"
+echo -e "\e[1;31mDocker backup\e[00m"
 echo -e "\e[1;33m"$(date)"\e[00m"
 echo -e "\e[1;36mMore goodies at http://blog.stefanxo.com/category/docker/\e[00m"
 echo -e ""
 
-# We only continue if bucket is configured
-if [[ -z "$bucket" || $bucket != *s3* || "$bucket" = "s3://bucket" ]]
+# We only continue if target is configured
+if [[ -z "$1" ]]
 then
-        echo "Please set \$bucket to your bucket."
-        echo -e "The bucket should be in the format : \e[1;36ms3://bucketname\e[00m"
-        echo "You can see which buckets you have access to with : \e[1;33ms3cmd ls\e[00m"
-        exit 1
+    if [[ -z "$target" ]]
+    then
+        echo "Please point to your target."
+       	exit 1
+    fi
+else
+    target="$1"
 fi
 
 # Timestamp (sortable AND readable)
 stamp=`date +"%Y_%m_%d"`
 
 # Feedback
-echo -e "Dumping to \e[1;32m$bucket/$stamp/\e[00m"
+echo -e "Dumping to \e[1;32m$target/$stamp/\e[00m"
 
 # List all running docker instances
 instances=`docker ps -q -notrunc` 
@@ -70,7 +70,7 @@ for container in $instances; do
 
     # Define our filenames
     filename="$stamp-$instancename-$imagename.docker.tar.gz"
-    tmpfile="$tmpdir/$filename"
+    destfile="$target/$filename"
     objectdir="$bucket/$stamp/"
 
     # Feedback
@@ -82,14 +82,10 @@ for container in $instances; do
     echo -e " creating \e[0;35m$tmpfile\e[00m"
     docker inspect "$container" > "$tmpdir/$container.json"
     docker export "$container" | gzip -c > "$tmpdir/$container.tgz"
-    tar cfz "$tmpfile" $tmpdir/$container.json $tmpdir/$container.tgz $mounts
+    tar cfz "$destfile" $tmpdir/$container.json $tmpdir/$container.tgz $mounts
     rm -f $tmpdir/$container.*
 
 done;
-
-# Upload all files
-echo -e " \e[1;36mSyncing...\e[00m"
-s3cmd --parallel --workers $workers sync "$tmpdir" "$objectdir"
 
 # Clean up
 rm -rf "$tmpdir"
@@ -102,7 +98,7 @@ then
     echo -e " \e[1;35mRemoving old backups...\e[00m"
     olderThan=`date -d "$daystokeep days ago" +%s`
 
-    s3cmd --recursive ls $bucket | while read -r line;
+    ls --recursive $bucket | while read -r line;
     do
         createDate=`echo $line|awk {'print $1" "$2'}`
         createDate=`date -d"$createDate" +%s`
@@ -112,7 +108,7 @@ then
             echo -e " Removing outdated backup \e[1;31m$fileName\e[00m"
             if [[ $fileName != "" ]]
             then
-                s3cmd del "$fileName"
+                rm "$fileName"
             fi
         fi
     done;
