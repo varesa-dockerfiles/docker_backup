@@ -38,7 +38,7 @@ echo -e ""
 # We only continue if target is configured
 if [[ -z "$1" ]]
 then
-    if [[ -z "$target" ]]
+    if [[ -z "$target" ]]
     then
         echo "Please point to your target."
        	exit 1
